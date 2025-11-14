@@ -1,0 +1,161 @@
+name: Build and Analyze Operator Index
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+    inputs:
+      index_version:
+        description: 'Index version to analyze'
+        required: false
+        default: 'v4.20'
+      index_image:
+        description: 'Index image to use'
+        required: false
+        default: 'registry.redhat.io/redhat/redhat-operator-index:v4.20'
+  schedule:
+    # Run weekly on Mondays at 2 AM UTC
+    - cron: '0 2 * * 1'
+
+env:
+  GO_VERSION: '1.21'
+  INDEX_VERSION: ${{ github.event.inputs.index_version || 'v4.20' }}
+  INDEX_IMAGE: ${{ github.event.inputs.index_image || 'registry.redhat.io/redhat/redhat-operator-index:v4.20' }}
+
+jobs:
+  build-and-analyze:
+    name: Build and Analyze Operators
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Cache opm binary
+        id: cache-opm
+        uses: actions/cache@v4
+        with:
+          path: ./bin/opm
+          key: ${{ runner.os }}-opm-${{ env.INDEX_VERSION }}
+          restore-keys: |
+            ${{ runner.os }}-opm-
+
+      - name: Run tests
+        run: make test
+
+      - name: Download opm CLI
+        if: steps.cache-opm.outputs.cache-hit != 'true'
+        run: make download-opm
+
+      - name: Verify opm installation
+        run: |
+          ls -lh ./bin/opm
+          ./bin/opm version || echo "opm binary ready"
+
+      - name: Generate operator index
+        run: |
+          make generate-index INDEX_VERSION=${{ env.INDEX_VERSION }} INDEX_IMAGE=${{ env.INDEX_IMAGE }}
+        env:
+          INDEX_VERSION: ${{ env.INDEX_VERSION }}
+          INDEX_IMAGE: ${{ env.INDEX_IMAGE }}
+
+      - name: Build application
+        run: make build
+
+      - name: Run analysis and generate JSON output
+        run: |
+          mkdir -p output
+          make run-json > output/operator-arch-analysis.json
+          echo "Generated JSON analysis"
+
+      - name: Generate CSV output
+        run: |
+          make run-csv > output/operator-arch-analysis.csv
+          echo "Generated CSV analysis"
+
+      - name: Generate summary statistics
+        run: |
+          ./bin/index-arch-sorter -file redhat-operator-index.json > output/operator-summary.txt
+          echo "Generated summary report"
+
+      - name: Generate architecture-specific reports
+        run: |
+          mkdir -p output/architectures
+          for arch in amd64 arm64 ppc64le s390x; do
+            echo "Generating report for $arch"
+            ./bin/index-arch-sorter -arch $arch -format json > output/architectures/$arch-operators.json
+            ./bin/index-arch-sorter -arch $arch -format csv > output/architectures/$arch-operators.csv
+          done
+
+      - name: Create analysis summary
+        run: |
+          cat > output/README.md << 'EOF'
+          # Operator Architecture Analysis Report
+          
+          Generated: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          Index Version: ${{ env.INDEX_VERSION }}
+          Index Image: ${{ env.INDEX_IMAGE }}
+          
+          ## Files
+          
+          - `operator-arch-analysis.json` - Complete analysis in JSON format
+          - `operator-arch-analysis.csv` - Complete analysis in CSV format
+          - `operator-summary.txt` - Human-readable summary
+          - `architectures/` - Architecture-specific reports
+            - `amd64-operators.json` - AMD64 supporting operators (JSON)
+            - `amd64-operators.csv` - AMD64 supporting operators (CSV)
+            - `arm64-operators.json` - ARM64 supporting operators (JSON)
+            - `arm64-operators.csv` - ARM64 supporting operators (CSV)
+            - `ppc64le-operators.json` - PPC64LE supporting operators (JSON)
+            - `ppc64le-operators.csv` - PPC64LE supporting operators (CSV)
+            - `s390x-operators.json` - S390X supporting operators (JSON)
+            - `s390x-operators.csv` - S390X supporting operators (CSV)
+          
+          ## Usage
+          
+          Download the artifacts and use them to analyze operator architecture support across the Red Hat operator catalog.
+          EOF
+
+      - name: Upload operator analysis artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: operator-arch-analysis-${{ env.INDEX_VERSION }}-${{ github.run_number }}
+          path: output/
+          retention-days: 90
+
+      - name: Upload raw index file
+        uses: actions/upload-artifact@v4
+        with:
+          name: redhat-operator-index-${{ env.INDEX_VERSION }}-${{ github.run_number }}
+          path: redhat-operator-index.json
+          retention-days: 30
+
+      - name: Display summary
+        run: |
+          echo "## Operator Architecture Analysis Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Index Version:** ${{ env.INDEX_VERSION }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Generated:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Results" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -20 output/operator-summary.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+

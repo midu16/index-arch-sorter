@@ -1,0 +1,62 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+dist/
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+coverage.txt
+coverage.html
+
+# Dependency directories
+vendor/
+
+# Go workspace file
+go.work
+
+# Environment variables
+.env
+.env.local
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Generated operator index files
+*.json
+!go.mod
+!go.sum
+
+# Downloaded tarballs
+*.tar.gz
+*.tgz
+*.zip
+
+# Build artifacts
+*.o
+*.a
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+redhat-operator-index.json
+
+# Log files
+*.log
+
+# OPM binary and related files
+./bin/opm
+./bin/opm-*
+./bin/index-arch-sorter
