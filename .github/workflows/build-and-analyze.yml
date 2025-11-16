@@ -78,7 +78,7 @@ jobs:
 
       - name: Write auth file
         run: |
-          echo "${{ secrets.REGISTRY_REDHAT_IO_AUTH }}" > /home/runner/.docker/config.json
+          printf '%s\n' "${{ secrets.REGISTRY_REDHAT_IO_AUTH }}" > /home/runner/.docker/config.json
           chmod 600 /home/runner/.docker/config.json
 
       - name: Test Login
