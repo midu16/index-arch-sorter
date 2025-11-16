@@ -79,6 +79,22 @@ jobs:
       - name: Build application
         run: make build
 
+      - name: Ensure Docker config directory exists
+        run: |
+          mkdir -p /home/runner/.docker
+
+      - name: Write auth file
+        run: |
+          echo "${{ secrets.REGISTRY_REDHAT_IO_AUTH }}" > /home/runner/.docker/config.json
+          chmod 600 /home/runner/.docker/config.json
+
+      - name: Test Login
+        run: |
+          echo "Verifying auth file exists..."
+          ls -lh /home/runner/.docker/config.json
+          echo "Testing podman login to registry.redhat.io..."
+          podman login registry.redhat.io --authfile /home/runner/.docker/config.json
+
       - name: Run analysis and generate JSON output
         run: |
           mkdir -p output
