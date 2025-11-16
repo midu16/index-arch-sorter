@@ -69,13 +69,6 @@ jobs:
           ls -lh ./bin/opm
           ./bin/opm version || echo "opm binary ready"
 
-      - name: Generate operator index
-        run: |
-          make generate-index INDEX_VERSION=${{ env.INDEX_VERSION }} INDEX_IMAGE=${{ env.INDEX_IMAGE }}
-        env:
-          INDEX_VERSION: ${{ env.INDEX_VERSION }}
-          INDEX_IMAGE: ${{ env.INDEX_IMAGE }}
-
       - name: Build application
         run: make build
 
@@ -94,6 +87,13 @@ jobs:
           ls -lh /home/runner/.docker/config.json
           echo "Testing podman login to registry.redhat.io..."
           podman login registry.redhat.io --authfile /home/runner/.docker/config.json
+
+      - name: Generate operator index
+        run: |
+          make generate-index INDEX_VERSION=${{ env.INDEX_VERSION }} INDEX_IMAGE=${{ env.INDEX_IMAGE }}
+        env:
+          INDEX_VERSION: ${{ env.INDEX_VERSION }}
+          INDEX_IMAGE: ${{ env.INDEX_IMAGE }}
 
       - name: Run analysis and generate JSON output
         run: |
